@@ -6,6 +6,8 @@ import com.example.quotes.quotes.jwt.TokenService;
 import com.example.quotes.quotes.util.TokenProcessor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.GenericFilterBean;
 
@@ -37,25 +39,19 @@ public class AuthorizationFilter extends GenericFilterBean {
         HttpServletRequest httpServletRequest = (HttpServletRequest) servletRequest;
         HttpServletResponse httpServletResponse = (HttpServletResponse) servletResponse;
         try {
-            String authorizationHeaderValue = getHeaderValue(httpServletRequest);
-            String token = TokenProcessor.getTokenValueFromHeaderString(authorizationHeaderValue).trim();
-
-            log.info(token.trim());
-            tokenService.createToken();
-
+            String authorizationHeaderValue = httpServletRequest.getHeader(AUTHORIZATION_HEADER);
+            if (!StringUtils.isEmpty(authorizationHeaderValue)) {
+                String token = TokenProcessor.getTokenValueFromHeaderString(authorizationHeaderValue).trim();
+                if (!StringUtils.isEmpty(token) && tokenService.isValidJWT(token)) {
+                    Authentication authenticationToken = tokenService.getAuthentication(token);
+                    SecurityContextHolder.getContext().setAuthentication(authenticationToken);
+                }
+            }
+            filterChain.doFilter(servletRequest, servletResponse);
         } catch (AuthorizationHeaderNotFoundException | AuthorizationHeaderValueException e) {
             log.error("Error:", e);
             httpServletResponse.sendError(HttpServletResponse.SC_UNAUTHORIZED);
         }
-        filterChain.doFilter(servletRequest, servletResponse);
-    }
-
-    private String getHeaderValue(HttpServletRequest httpServletRequest) {
-        String headerValue = httpServletRequest.getHeader(AUTHORIZATION_HEADER);
-        if (StringUtils.isEmpty(headerValue)) {
-            throw new AuthorizationHeaderNotFoundException("Authorization header not found");
-        }
-        return headerValue;
     }
 
 }
